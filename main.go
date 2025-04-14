@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"image/color"
 	"io"
+	"io/ioutil"
+	"log"
 	"math/rand"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 	"unicode"
@@ -19,6 +22,89 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 )
+
+// ChatMessage represents a single message in the conversation
+type ChatMessage struct {
+	Sender  string `json:"sender"`
+	Content string `json:"content"`
+	Time    int64  `json:"time"` // Unix timestamp
+}
+
+// ChatHistory represents the entire conversation history
+type ChatHistory struct {
+	Messages []ChatMessage `json:"messages"`
+}
+
+// File path for saving conversation history
+const historyFilePath = "goku_chat_history.json"
+
+// saveHistory saves the chat history to a JSON file
+func saveHistory(messages []ChatMessage) error {
+	history := ChatHistory{
+		Messages: messages,
+	}
+
+	data, err := json.MarshalIndent(history, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal history: %w", err)
+	}
+
+	err = ioutil.WriteFile(historyFilePath, data, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to write history file: %w", err)
+	}
+
+	return nil
+}
+
+// loadHistory loads the chat history from a JSON file
+func loadHistory() ([]ChatMessage, error) {
+	// Check if file exists
+	if _, err := os.Stat(historyFilePath); os.IsNotExist(err) {
+		// If file doesn't exist, return empty history
+		return []ChatMessage{}, nil
+	}
+
+	data, err := ioutil.ReadFile(historyFilePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read history file: %w", err)
+	}
+
+	var history ChatHistory
+	err = json.Unmarshal(data, &history)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal history: %w", err)
+	}
+
+	return history.Messages, nil
+}
+
+// formatChatHistoryText formats the chat history for display
+func formatChatHistoryText(messages []ChatMessage) string {
+	var builder strings.Builder
+
+	for _, msg := range messages {
+		builder.WriteString(msg.Sender + ": " + msg.Content + "\n\n")
+	}
+
+	return builder.String()
+}
+
+// addMessageToHistory adds a new message to the history and saves it
+func addMessageToHistory(messages *[]ChatMessage, sender, content string) error {
+	// Create new message
+	newMessage := ChatMessage{
+		Sender:  sender,
+		Content: content,
+		Time:    time.Now().Unix(),
+	}
+
+	// Add to messages
+	*messages = append(*messages, newMessage)
+
+	// Save to file
+	return saveHistory(*messages)
+}
 
 // GokuTheme is a custom theme with Dragon Ball inspired colors
 type GokuTheme struct {
@@ -426,13 +512,38 @@ func main() {
 	window := myApp.NewWindow("Chat with Goku")
 	window.SetIcon(theme.InfoIcon()) // Use a default icon
 
+	// Load chat history
+	chatMessages, err := loadHistory()
+	if err != nil {
+		log.Printf("Error loading chat history: %v", err)
+		// Continue with empty history
+		chatMessages = []ChatMessage{}
+	}
+
+	// If history is empty, add a welcome message
+	if len(chatMessages) == 0 {
+		welcomeMsg := ChatMessage{
+			Sender:  "Goku",
+			Content: "Hey there! I'm Goku! *puts hand behind head and grins* What's up?",
+			Time:    time.Now().Unix(),
+		}
+		chatMessages = append(chatMessages, welcomeMsg)
+		// Save the initial history
+		if err := saveHistory(chatMessages); err != nil {
+			log.Printf("Error saving initial chat history: %v", err)
+		}
+	}
+
 	// Create a chat history area with word wrapping
-	chatHistory := widget.NewLabel("Goku: Hey there! I'm Goku! *puts hand behind head and grins* What's up?\n\n")
+	chatHistory := widget.NewLabel(formatChatHistoryText(chatMessages))
 	chatHistory.Wrapping = fyne.TextWrapWord
 
 	// Create a scroll container for chat history with proper scaling
 	historyBox := container.NewVBox(chatHistory)
 	scrollContainer := container.NewScroll(historyBox)
+
+	// Scroll to bottom after initial load
+	scrollContainer.ScrollToBottom()
 
 	// Create a stylized header
 	headerText := canvas.NewText("CHAT WITH GOKU", gokuOrange)
@@ -477,9 +588,15 @@ func main() {
 	sendAction = func() {
 		message := input.Text
 		if strings.TrimSpace(message) != "" {
-			// Add user message to chat history
+			// Add user message to chat history UI
 			currentText := chatHistory.Text
 			chatHistory.SetText(currentText + "You: " + message + "\n\n")
+
+			// Add to persistent history
+			if err := addMessageToHistory(&chatMessages, "You", message); err != nil {
+				log.Printf("Error saving user message: %v", err)
+			}
+
 			// Scroll to the bottom immediately after adding user message
 			scrollContainer.ScrollToBottom()
 
@@ -493,16 +610,24 @@ func main() {
 				response, err := getAIResponse(message)
 				if err != nil {
 					response = "Oops! Looks like I messed up there! *scratches head* " + err.Error()
-				}
 
-				// Update UI in the main thread with typing animation
-				window.Canvas().Refresh(chatHistory)
-				// Pass the scroll container to the typing animation
-				simulateTyping(chatHistory, "Goku: ", response, scrollContainer, func() {
-					loadingIndicator.Hide()
-					sendButton.Enable()
-					// Final scroll to bottom happens in simulateTyping completion handler
-				})
+					// Update UI but don't save error messages to history
+					window.Canvas().Refresh(chatHistory)
+					simulateTyping(chatHistory, "Goku: ", response, scrollContainer, func() {
+						loadingIndicator.Hide()
+						sendButton.Enable()
+					})
+				} else {
+					// Only add to persistent history if it's not an error message
+					addMessageToHistory(&chatMessages, "Goku", response)
+
+					// Update UI in the main thread with typing animation
+					window.Canvas().Refresh(chatHistory)
+					simulateTyping(chatHistory, "Goku: ", response, scrollContainer, func() {
+						loadingIndicator.Hide()
+						sendButton.Enable()
+					})
+				}
 			}()
 		}
 	}
