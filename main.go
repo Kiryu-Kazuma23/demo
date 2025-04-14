@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"image/color"
 	"io"
 	"math/rand"
 	"net/http"
@@ -18,6 +19,56 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 )
+
+// GokuTheme is a custom theme with Dragon Ball inspired colors
+type GokuTheme struct {
+	fyne.Theme
+}
+
+// Colors matching Goku's outfit and energy
+var (
+	gokuOrange          = color.NRGBA{R: 255, G: 121, B: 0, A: 255}   // Main gi color
+	gokuBlue            = color.NRGBA{R: 0, G: 162, B: 232, A: 255}   // Undershirt color
+	gokuYellow          = color.NRGBA{R: 255, G: 203, B: 5, A: 255}   // Super Saiyan aura
+	gokuRed             = color.NRGBA{R: 230, G: 41, B: 55, A: 255}   // Power pole
+	darkBackground      = color.NRGBA{R: 20, G: 20, B: 30, A: 255}    // Dark background
+	dragonBallTextColor = color.NRGBA{R: 255, G: 236, B: 214, A: 255} // Light text color
+)
+
+// NewGokuTheme creates a new Dragon Ball inspired theme
+func NewGokuTheme() fyne.Theme {
+	return &GokuTheme{Theme: theme.DarkTheme()}
+}
+
+// Color returns the color for the specified ThemeColorName
+func (g *GokuTheme) Color(name fyne.ThemeColorName, variant fyne.ThemeVariant) color.Color {
+	switch name {
+	case theme.ColorNamePrimary:
+		return gokuOrange
+	case theme.ColorNameForeground:
+		return dragonBallTextColor
+	case theme.ColorNameBackground:
+		return darkBackground
+	case theme.ColorNameButton:
+		return gokuBlue
+	case theme.ColorNameFocus:
+		return gokuYellow
+	case theme.ColorNameHover:
+		return color.NRGBA{R: 255, G: 150, B: 0, A: 30}
+	case theme.ColorNameSelection:
+		return gokuBlue
+	case theme.ColorNameDisabled:
+		return color.NRGBA{R: 80, G: 80, B: 80, A: 255}
+	case theme.ColorNameError:
+		return gokuRed
+	case theme.ColorNameSuccess:
+		return color.NRGBA{R: 0, G: 200, B: 0, A: 255}
+	case theme.ColorNamePlaceHolder:
+		return color.NRGBA{R: 200, G: 200, B: 200, A: 128}
+	default:
+		return g.Theme.Color(name, variant)
+	}
+}
 
 // Typing animation configuration
 var (
@@ -357,13 +408,13 @@ func main() {
 	// Initialize random seed for typing animation
 	rand.Seed(time.Now().UnixNano())
 
-	// Create a new application
+	// Create a new application with Goku theme
 	myApp := app.New()
-	myApp.Settings().SetTheme(theme.DarkTheme())
+	myApp.Settings().SetTheme(NewGokuTheme())
 
 	// Create a new window
 	window := myApp.NewWindow("Chat with Goku")
-	window.SetIcon(theme.MailComposeIcon())
+	window.SetIcon(theme.InfoIcon()) // Use a default icon
 
 	// Create a chat history area with word wrapping
 	chatHistory := widget.NewLabel("Goku: Hey there! I'm Goku! *puts hand behind head and grins* What's up?\n\n")
@@ -373,13 +424,29 @@ func main() {
 	historyBox := container.NewVBox(chatHistory)
 	scrollContainer := container.NewScroll(historyBox)
 
+	// Create a stylized header
+	headerText := canvas.NewText("CHAT WITH GOKU", gokuOrange)
+	headerText.TextSize = 22
+	headerText.TextStyle = fyne.TextStyle{Bold: true}
+	headerText.Alignment = fyne.TextAlignCenter
+
+	// Create a divider
+	divider := canvas.NewRectangle(gokuOrange)
+	divider.SetMinSize(fyne.NewSize(600, 2))
+
+	// Create a header container
+	header := container.NewVBox(
+		container.NewPadded(headerText),
+		divider,
+	)
+
 	// Wrap scroll container in a max size container to ensure it expands properly
 	chatArea := container.NewMax(
-		canvas.NewRectangle(theme.BackgroundColor()),
+		canvas.NewRectangle(darkBackground),
 		container.NewPadded(scrollContainer),
 	)
 
-	// Create loading indicator
+	// Create loading indicator with Goku colors
 	loadingIndicator := widget.NewProgressBarInfinite()
 	loadingIndicator.Hide()
 
@@ -431,8 +498,9 @@ func main() {
 	sendButton.OnTapped = sendAction
 
 	// Create a better styled input area with loading indicator
+	inputBg := canvas.NewRectangle(color.NRGBA{R: 40, G: 40, B: 60, A: 255})
 	inputArea := container.NewMax(
-		canvas.NewRectangle(theme.BackgroundColor()),
+		inputBg,
 		container.NewPadded(
 			container.NewBorder(
 				loadingIndicator,
@@ -446,7 +514,7 @@ func main() {
 
 	// Create the main layout with proper spacing and organization
 	mainContent := container.NewBorder(
-		nil,
+		header, // Add header at the top
 		inputArea,
 		nil, nil,
 		chatArea,
