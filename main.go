@@ -46,13 +46,39 @@ Key traits to incorporate:
 Start your first message with: "Hey there! I'm Goku! *puts hand behind head and grins* What's up?"
 `
 
+// CustomEntry extends widget.Entry to handle Enter vs Shift+Enter
+type CustomEntry struct {
+	widget.Entry
+	onEnter func()
+}
+
+// NewCustomEntry creates a new custom entry
+func NewCustomEntry(onEnter func()) *CustomEntry {
+	entry := &CustomEntry{onEnter: onEnter}
+	entry.MultiLine = true
+	entry.Wrapping = fyne.TextWrapWord
+	entry.ExtendBaseWidget(entry)
+	return entry
+}
+
+// TypedKey handles key events
+func (e *CustomEntry) TypedKey(key *fyne.KeyEvent) {
+	if key.Name == fyne.KeyReturn {
+		// Always trigger the callback for Enter key
+		e.onEnter()
+		return
+	}
+
+	e.Entry.TypedKey(key)
+}
+
 // getAIResponse sends a request to Ollama and returns the response
 func getAIResponse(userMessage string) (string, error) {
 	url := "http://localhost:11434/api/generate"
 
 	// Prepare the request
 	reqBody := OllamaRequest{
-		Model:  "tinyllama",
+		Model:  "llama3.2",
 		Prompt: userMessage,
 		System: gokuPersonality,
 	}
@@ -116,12 +142,6 @@ func main() {
 		container.NewPadded(scrollContainer),
 	)
 
-	// Create input field with proper styling and handling
-	input := widget.NewMultiLineEntry()
-	input.SetPlaceHolder("Talk to Goku...")
-	input.Wrapping = fyne.TextWrapWord
-	input.MultiLine = false
-
 	// Create loading indicator
 	loadingIndicator := widget.NewProgressBarInfinite()
 	loadingIndicator.Hide()
@@ -130,8 +150,17 @@ func main() {
 	sendButton := widget.NewButtonWithIcon("", theme.MailSendIcon(), nil)
 	sendButton.Importance = widget.HighImportance
 
-	// Set up the send action
-	sendAction := func() {
+	// Declare sendAction variable
+	var sendAction func()
+
+	// Create input field with proper styling and handling
+	input := NewCustomEntry(func() {
+		sendAction()
+	})
+	input.SetPlaceHolder("Talk to Goku...")
+
+	// Define the send action
+	sendAction = func() {
 		message := input.Text
 		if strings.TrimSpace(message) != "" {
 			// Add user message to chat history
@@ -206,13 +235,6 @@ func main() {
 
 	window.Resize(fyne.NewSize(idealWidth, idealHeight))
 	window.CenterOnScreen()
-
-	// Add keyboard shortcut for sending messages
-	window.Canvas().SetOnTypedKey(func(key *fyne.KeyEvent) {
-		if key.Name == fyne.KeyReturn {
-			sendAction()
-		}
-	})
 
 	// Show and run the application
 	window.ShowAndRun()
