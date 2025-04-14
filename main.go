@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"strings"
+	"time"
+	"unicode"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -14,6 +17,60 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+)
+
+// Typing animation configuration
+var (
+	// Basic typing timing
+	minTypingDelay = 40  // Minimum delay between characters in milliseconds
+	maxTypingDelay = 150 // Maximum delay between characters in milliseconds
+
+	// Variance for common keys (will type faster)
+	commonLettersSpeed = 0.7 // Multiplier for common letters (e,a,i,o,t,n,s,r)
+	commonLetters      = "eaiotnsr"
+
+	// Variance for tricky keys (will type slower)
+	trickeyKeysSpeed = 1.5 // Multiplier for keys that are harder to reach
+	trickeyKeys      = "qzxjkwvp"
+
+	// Pauses - thinking and phrasing
+	chanceForPause   = 8                                          // 1 in X chance for a longer pause (thinking pause)
+	pauseDuration    = 350                                        // Duration of normal thinking pause in milliseconds
+	longThinkChance  = 25                                         // 1 in X chance for a very long thinking pause
+	longThinkDelay   = 1400                                       // Duration of a long thinking pause in milliseconds
+	thinkingTexts    = []string{"...", "hmm", "uh", "*thinking*"} // Texts to show during longer thinking
+	sentenceEndPause = 700                                        // Extra pause after completing a sentence
+
+	// Mistakes and corrections
+	chanceForMistake     = 18               // 1 in X chance for a typing mistake
+	mistakeNeighborChars = map[rune][]rune{ // Common mistaken neighboring keys
+		'a': {'s', 'q', 'z'},
+		's': {'a', 'd', 'w'},
+		'd': {'s', 'f', 'e'},
+		'f': {'d', 'g', 'r'},
+		'g': {'f', 'h', 't'},
+		'h': {'g', 'j', 'y'},
+		'j': {'h', 'k', 'u'},
+		'k': {'j', 'l', 'i'},
+		'l': {'k', ';', 'o'},
+		'z': {'x', 'a'},
+		'x': {'z', 'c', 's'},
+		'c': {'x', 'v', 'd'},
+		'v': {'c', 'b', 'f'},
+		'b': {'v', 'n', 'g'},
+		'n': {'b', 'm', 'h'},
+		'm': {'n', ',', 'j'},
+	}
+	chanceForDoubleError = 4   // 1 in X chance that the person makes a second error while fixing
+	backspaceDelay       = 180 // Delay before backspace in milliseconds
+	backspaceMinDelay    = 120 // Min delay between multiple backspaces (ms)
+	backspaceMaxDelay    = 200 // Max delay between multiple backspaces (ms)
+
+	// Goku-specific quirks
+	excitedPhrases         = []string{"awesome", "power", "training", "fight", "strong", "food", "eat"}
+	excitedTypingSpeedMult = 0.6  // Types faster when excited (lower is faster)
+	hungrySlowdownChance   = 15   // 1 in X chance he gets distracted by food thoughts
+	hungrySlowdownDelay    = 2000 // How long he pauses when thinking about food
 )
 
 // OllamaRequest represents the request structure for Ollama API
@@ -72,6 +129,184 @@ func (e *CustomEntry) TypedKey(key *fyne.KeyEvent) {
 	e.Entry.TypedKey(key)
 }
 
+// simulateTyping gradually displays the message character by character to simulate typing
+func simulateTyping(chatHistory *widget.Label, prefix string, fullMessage string, onComplete func()) {
+	messageChars := []rune(fullMessage)
+	currentMessage := ""
+	currentIndex := 0
+	showingThinking := false
+
+	// Calculate word boundaries for natural typing rhythm
+	words := strings.Fields(fullMessage)
+	wordEndIndexes := make([]int, 0, len(words))
+	charCount := 0
+	for _, word := range words {
+		charCount += len(word)
+		wordEndIndexes = append(wordEndIndexes, charCount)
+		charCount++ // Account for the space
+	}
+
+	// Start with just the prefix
+	currentText := chatHistory.Text
+	chatHistory.SetText(currentText + prefix)
+
+	var addNextChar func()
+
+	// Function to add the next character
+	addNextChar = func() {
+		// Finished typing case
+		if currentIndex >= len(messageChars) {
+			// Finished typing, add newlines and call completion handler
+			chatHistory.SetText(chatHistory.Text + "\n\n")
+			onComplete()
+			return
+		}
+
+		// If we are showing a thinking indicator, remove it first
+		if showingThinking {
+			// Remove the thinking indicator
+			chatHistory.SetText(currentText + prefix + currentMessage)
+			showingThinking = false
+		}
+
+		// Decide if we make a mistake - higher chance after word boundaries and for tricky keys
+		makeMistake := rand.Intn(chanceForMistake) == 0 && currentIndex < len(messageChars)-1
+
+		// Increase mistake chance for tricky keys
+		currentChar := messageChars[currentIndex]
+		if strings.ContainsRune(trickeyKeys, unicode.ToLower(currentChar)) {
+			makeMistake = makeMistake || rand.Intn(chanceForMistake/2) == 0
+		}
+
+		if makeMistake {
+			// Choose a wrong character - preferably adjacent on keyboard if defined
+			var wrongChar rune
+
+			// Try to use a neighboring key if available for more realistic mistakes
+			if neighbors, exists := mistakeNeighborChars[unicode.ToLower(currentChar)]; exists && len(neighbors) > 0 {
+				wrongChar = neighbors[rand.Intn(len(neighbors))]
+				// Maintain capitalization if needed
+				if unicode.IsUpper(currentChar) {
+					wrongChar = unicode.ToUpper(wrongChar)
+				}
+			} else {
+				// Random error if no neighbors defined
+				wrongChar = rune(rand.Intn(26) + 'a')
+				if unicode.IsUpper(currentChar) {
+					wrongChar = unicode.ToUpper(wrongChar)
+				}
+			}
+
+			// Add the wrong character
+			chatHistory.SetText(currentText + prefix + currentMessage + string(wrongChar))
+
+			// Schedule the backspace - humans notice mistakes quickly
+			time.AfterFunc(time.Duration(backspaceDelay)*time.Millisecond, func() {
+				// Remove the wrong character (simulate backspace)
+				chatHistory.SetText(currentText + prefix + currentMessage)
+
+				// Slight chance for a double-error while correcting
+				if rand.Intn(chanceForDoubleError) == 0 {
+					// Make another wrong keystroke before getting it right
+					mistakeChar := rune(rand.Intn(26) + 'a')
+					if unicode.IsUpper(currentChar) {
+						mistakeChar = unicode.ToUpper(mistakeChar)
+					}
+
+					// Show the second mistake
+					chatHistory.SetText(currentText + prefix + currentMessage + string(mistakeChar))
+
+					// And then backspace again
+					backspaceRetryDelay := rand.Intn(backspaceMaxDelay-backspaceMinDelay) + backspaceMinDelay
+					time.AfterFunc(time.Duration(backspaceRetryDelay)*time.Millisecond, func() {
+						chatHistory.SetText(currentText + prefix + currentMessage)
+
+						// Finally schedule the correct character
+						time.AfterFunc(time.Duration(minTypingDelay)*time.Millisecond, addNextChar)
+					})
+					return
+				}
+
+				// Schedule the correct character after a normal pause
+				time.AfterFunc(time.Duration(minTypingDelay)*time.Millisecond, addNextChar)
+			})
+			return
+		}
+
+		// Normal case - add the next character
+		currentMessage += string(messageChars[currentIndex])
+		chatHistory.SetText(currentText + prefix + currentMessage)
+		currentIndex++
+
+		// Calculate next delay based on character type and context
+		delay := rand.Intn(maxTypingDelay-minTypingDelay) + minTypingDelay
+
+		// Type common letters faster
+		if strings.ContainsRune(commonLetters, unicode.ToLower(currentChar)) {
+			delay = int(float64(delay) * commonLettersSpeed)
+		}
+
+		// Type tricky letters slower
+		if strings.ContainsRune(trickeyKeys, unicode.ToLower(currentChar)) {
+			delay = int(float64(delay) * trickeyKeysSpeed)
+		}
+
+		// Check if we're at a word boundary (slightly longer pause)
+		for _, wordEnd := range wordEndIndexes {
+			if currentIndex == wordEnd {
+				delay += rand.Intn(80) + 40 // Add 40-120ms pause at word boundaries
+				break
+			}
+		}
+
+		// Check if we just typed an excited word (Goku types faster when excited)
+		for _, phrase := range excitedPhrases {
+			if currentIndex >= len(phrase) &&
+				strings.ToLower(string(messageChars[currentIndex-len(phrase):currentIndex])) == phrase {
+				delay = int(float64(delay) * excitedTypingSpeedMult)
+				break
+			}
+		}
+
+		// Random chance for a "thinking" pause
+		if rand.Intn(chanceForPause) == 0 && currentIndex < len(messageChars) {
+			// Add a longer pause if previous character was punctuation or at end of sentence
+			if currentIndex > 0 && strings.ContainsRune(",.!?", messageChars[currentIndex-1]) {
+				// Longer thinking pause
+				delay = pauseDuration
+
+				// Add extra pause at end of sentences
+				if strings.ContainsRune(".!?", messageChars[currentIndex-1]) {
+					delay += sentenceEndPause
+				}
+
+				// Check if we should do a very long thinking pause with visible indicator
+				if rand.Intn(longThinkChance) == 0 {
+					// Show thinking indicator
+					thinkingText := thinkingTexts[rand.Intn(len(thinkingTexts))]
+					chatHistory.SetText(currentText + prefix + currentMessage + " " + thinkingText)
+					showingThinking = true
+					delay = longThinkDelay
+				}
+
+				// Special case: Goku gets distracted thinking about food
+				if rand.Intn(hungrySlowdownChance) == 0 {
+					thinkingText := "*stomach growls*"
+					chatHistory.SetText(currentText + prefix + currentMessage + " " + thinkingText)
+					showingThinking = true
+					delay = hungrySlowdownDelay
+				}
+			}
+		}
+
+		// Schedule the next character
+		time.AfterFunc(time.Duration(delay)*time.Millisecond, addNextChar)
+	}
+
+	// Start the animation
+	addNextChar()
+}
+
 // getAIResponse sends a request to Ollama and returns the response
 func getAIResponse(userMessage string) (string, error) {
 	url := "http://localhost:11434/api/generate"
@@ -119,6 +354,9 @@ func getAIResponse(userMessage string) (string, error) {
 }
 
 func main() {
+	// Initialize random seed for typing animation
+	rand.Seed(time.Now().UnixNano())
+
 	// Create a new application
 	myApp := app.New()
 	myApp.Settings().SetTheme(theme.DarkTheme())
@@ -178,12 +416,13 @@ func main() {
 					response = "Oops! Looks like I messed up there! *scratches head* " + err.Error()
 				}
 
-				// Update UI in the main thread
+				// Update UI in the main thread with typing animation
 				window.Canvas().Refresh(chatHistory)
-				chatHistory.SetText(chatHistory.Text + "Goku: " + response + "\n\n")
-				loadingIndicator.Hide()
-				sendButton.Enable()
-				scrollContainer.ScrollToBottom()
+				simulateTyping(chatHistory, "Goku: ", response, func() {
+					loadingIndicator.Hide()
+					sendButton.Enable()
+					scrollContainer.ScrollToBottom()
+				})
 			}()
 		}
 	}
