@@ -181,7 +181,7 @@ func (e *CustomEntry) TypedKey(key *fyne.KeyEvent) {
 }
 
 // simulateTyping gradually displays the message character by character to simulate typing
-func simulateTyping(chatHistory *widget.Label, prefix string, fullMessage string, onComplete func()) {
+func simulateTyping(chatHistory *widget.Label, prefix string, fullMessage string, scrollContainer *container.Scroll, onComplete func()) {
 	messageChars := []rune(fullMessage)
 	currentMessage := ""
 	currentIndex := 0
@@ -200,6 +200,7 @@ func simulateTyping(chatHistory *widget.Label, prefix string, fullMessage string
 	// Start with just the prefix
 	currentText := chatHistory.Text
 	chatHistory.SetText(currentText + prefix)
+	scrollContainer.ScrollToBottom()
 
 	var addNextChar func()
 
@@ -209,6 +210,7 @@ func simulateTyping(chatHistory *widget.Label, prefix string, fullMessage string
 		if currentIndex >= len(messageChars) {
 			// Finished typing, add newlines and call completion handler
 			chatHistory.SetText(chatHistory.Text + "\n\n")
+			scrollContainer.ScrollToBottom()
 			onComplete()
 			return
 		}
@@ -217,6 +219,7 @@ func simulateTyping(chatHistory *widget.Label, prefix string, fullMessage string
 		if showingThinking {
 			// Remove the thinking indicator
 			chatHistory.SetText(currentText + prefix + currentMessage)
+			scrollContainer.ScrollToBottom()
 			showingThinking = false
 		}
 
@@ -250,11 +253,13 @@ func simulateTyping(chatHistory *widget.Label, prefix string, fullMessage string
 
 			// Add the wrong character
 			chatHistory.SetText(currentText + prefix + currentMessage + string(wrongChar))
+			scrollContainer.ScrollToBottom()
 
 			// Schedule the backspace - humans notice mistakes quickly
 			time.AfterFunc(time.Duration(backspaceDelay)*time.Millisecond, func() {
 				// Remove the wrong character (simulate backspace)
 				chatHistory.SetText(currentText + prefix + currentMessage)
+				scrollContainer.ScrollToBottom()
 
 				// Slight chance for a double-error while correcting
 				if rand.Intn(chanceForDoubleError) == 0 {
@@ -266,11 +271,13 @@ func simulateTyping(chatHistory *widget.Label, prefix string, fullMessage string
 
 					// Show the second mistake
 					chatHistory.SetText(currentText + prefix + currentMessage + string(mistakeChar))
+					scrollContainer.ScrollToBottom()
 
 					// And then backspace again
 					backspaceRetryDelay := rand.Intn(backspaceMaxDelay-backspaceMinDelay) + backspaceMinDelay
 					time.AfterFunc(time.Duration(backspaceRetryDelay)*time.Millisecond, func() {
 						chatHistory.SetText(currentText + prefix + currentMessage)
+						scrollContainer.ScrollToBottom()
 
 						// Finally schedule the correct character
 						time.AfterFunc(time.Duration(minTypingDelay)*time.Millisecond, addNextChar)
@@ -287,6 +294,7 @@ func simulateTyping(chatHistory *widget.Label, prefix string, fullMessage string
 		// Normal case - add the next character
 		currentMessage += string(messageChars[currentIndex])
 		chatHistory.SetText(currentText + prefix + currentMessage)
+		scrollContainer.ScrollToBottom()
 		currentIndex++
 
 		// Calculate next delay based on character type and context
@@ -336,6 +344,7 @@ func simulateTyping(chatHistory *widget.Label, prefix string, fullMessage string
 					// Show thinking indicator
 					thinkingText := thinkingTexts[rand.Intn(len(thinkingTexts))]
 					chatHistory.SetText(currentText + prefix + currentMessage + " " + thinkingText)
+					scrollContainer.ScrollToBottom()
 					showingThinking = true
 					delay = longThinkDelay
 				}
@@ -344,6 +353,7 @@ func simulateTyping(chatHistory *widget.Label, prefix string, fullMessage string
 				if rand.Intn(hungrySlowdownChance) == 0 {
 					thinkingText := "*stomach growls*"
 					chatHistory.SetText(currentText + prefix + currentMessage + " " + thinkingText)
+					scrollContainer.ScrollToBottom()
 					showingThinking = true
 					delay = hungrySlowdownDelay
 				}
@@ -470,6 +480,8 @@ func main() {
 			// Add user message to chat history
 			currentText := chatHistory.Text
 			chatHistory.SetText(currentText + "You: " + message + "\n\n")
+			// Scroll to the bottom immediately after adding user message
+			scrollContainer.ScrollToBottom()
 
 			// Clear input and show loading
 			input.SetText("")
@@ -485,10 +497,11 @@ func main() {
 
 				// Update UI in the main thread with typing animation
 				window.Canvas().Refresh(chatHistory)
-				simulateTyping(chatHistory, "Goku: ", response, func() {
+				// Pass the scroll container to the typing animation
+				simulateTyping(chatHistory, "Goku: ", response, scrollContainer, func() {
 					loadingIndicator.Hide()
 					sendButton.Enable()
-					scrollContainer.ScrollToBottom()
+					// Final scroll to bottom happens in simulateTyping completion handler
 				})
 			}()
 		}
