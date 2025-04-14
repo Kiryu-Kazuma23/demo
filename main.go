@@ -159,27 +159,27 @@ func (g *GokuTheme) Color(name fyne.ThemeColorName, variant fyne.ThemeVariant) c
 // Typing animation configuration
 var (
 	// Basic typing timing
-	minTypingDelay = 40  // Minimum delay between characters in milliseconds
-	maxTypingDelay = 150 // Maximum delay between characters in milliseconds
+	minTypingDelay = 30  // Minimum delay between characters in milliseconds
+	maxTypingDelay = 100 // Maximum delay between characters in milliseconds
 
 	// Variance for common keys (will type faster)
-	commonLettersSpeed = 0.7 // Multiplier for common letters (e,a,i,o,t,n,s,r)
+	commonLettersSpeed = 0.6 // Multiplier for common letters (e,a,i,o,t,n,s,r)
 	commonLetters      = "eaiotnsr"
 
 	// Variance for tricky keys (will type slower)
-	trickeyKeysSpeed = 1.5 // Multiplier for keys that are harder to reach
+	trickeyKeysSpeed = 1.3 // Multiplier for keys that are harder to reach
 	trickeyKeys      = "qzxjkwvp"
 
 	// Pauses - thinking and phrasing
-	chanceForPause   = 8                                          // 1 in X chance for a longer pause (thinking pause)
-	pauseDuration    = 350                                        // Duration of normal thinking pause in milliseconds
-	longThinkChance  = 25                                         // 1 in X chance for a very long thinking pause
-	longThinkDelay   = 1400                                       // Duration of a long thinking pause in milliseconds
+	chanceForPause   = 10                                         // 1 in X chance for a longer pause (thinking pause)
+	pauseDuration    = 250                                        // Duration of normal thinking pause in milliseconds
+	longThinkChance  = 30                                         // 1 in X chance for a very long thinking pause
+	longThinkDelay   = 1000                                       // Duration of a long thinking pause in milliseconds
 	thinkingTexts    = []string{"...", "hmm", "uh", "*thinking*"} // Texts to show during longer thinking
-	sentenceEndPause = 700                                        // Extra pause after completing a sentence
+	sentenceEndPause = 500                                        // Extra pause after completing a sentence
 
 	// Mistakes and corrections
-	chanceForMistake     = 18               // 1 in X chance for a typing mistake
+	chanceForMistake     = 20               // 1 in X chance for a typing mistake
 	mistakeNeighborChars = map[rune][]rune{ // Common mistaken neighboring keys
 		'a': {'s', 'q', 'z'},
 		's': {'a', 'd', 'w'},
