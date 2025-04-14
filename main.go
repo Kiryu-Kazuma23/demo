@@ -127,10 +127,9 @@ func main() {
 	window := myApp.NewWindow("Chat with Goku")
 	window.SetIcon(theme.MailComposeIcon())
 
-	// Create a chat history area with custom style
-	chatHistory := widget.NewTextGrid()
-	chatHistory.SetText("Goku: Hey there! I'm Goku! *puts hand behind head and grins* What's up?\n\n")
-	chatHistory.ShowLineNumbers = false
+	// Create a chat history area with word wrapping
+	chatHistory := widget.NewLabel("Goku: Hey there! I'm Goku! *puts hand behind head and grins* What's up?\n\n")
+	chatHistory.Wrapping = fyne.TextWrapWord
 
 	// Create a scroll container for chat history with proper scaling
 	historyBox := container.NewVBox(chatHistory)
@@ -164,7 +163,7 @@ func main() {
 		message := input.Text
 		if strings.TrimSpace(message) != "" {
 			// Add user message to chat history
-			currentText := chatHistory.Text()
+			currentText := chatHistory.Text
 			chatHistory.SetText(currentText + "You: " + message + "\n\n")
 
 			// Clear input and show loading
@@ -181,7 +180,7 @@ func main() {
 
 				// Update UI in the main thread
 				window.Canvas().Refresh(chatHistory)
-				chatHistory.SetText(chatHistory.Text() + "Goku: " + response + "\n\n")
+				chatHistory.SetText(chatHistory.Text + "Goku: " + response + "\n\n")
 				loadingIndicator.Hide()
 				sendButton.Enable()
 				scrollContainer.ScrollToBottom()
