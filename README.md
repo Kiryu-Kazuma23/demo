@@ -17,7 +17,7 @@ Hey Dragon Ball superfans! 🔥 What if Goku could chat with you right now? This
 
 ## Get Started and Start Sharing
 
-1. **Quick Setup:** Download Go and Ollama ([here](https://golang.org/dl/) and [here](https://ollama.com/download)). Pull the model with `ollama pull tinyllama`.
+1. **Quick Setup:** Download Go and Ollama ([here](https://golang.org/dl/) and [here](https://ollama.com/download)). Pull the model with `ollama pull llama3.2`.
 
 2. Clone and launch:
    ```bash
