@@ -14,7 +14,7 @@ A fun desktop application that lets you chat with Goku from Dragon Ball! This ap
 
 - Go 1.16 or higher
 - Ollama installed and running locally
-- TinyLlama model installed in Ollama
+- Llama 3.2 model installed in Ollama
 
 ## Installation
 
@@ -25,9 +25,9 @@ A fun desktop application that lets you chat with Goku from Dragon Ball! This ap
    ollama serve
    ```
 
-2. Install the TinyLlama model in Ollama:
+2. Install the Llama 3.2 model in Ollama:
    ```bash
-   ollama pull tinyllama
+   ollama pull llama3.2
    ```
 
 3. Clone this repository:
